@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { Car } from "lucide-react";
 import { BRANDS } from "@/lib/data";
 import { BRAND_LOGOS } from "@/lib/brandLogos";
@@ -28,6 +32,69 @@ function BrandBadge({ brand }: { brand: string }) {
 }
 
 export default function Brands() {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const pausedRef = useRef(false);
+  const resumeTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const dragRef = useRef<{ startX: number; startScroll: number } | null>(null);
+
+  // Auto-scroll the track ourselves (instead of a CSS transform marquee)
+  // so the container can also be a real scrollable element — that's what
+  // lets touch/drag/wheel input move it manually.
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    let frame: number;
+    let last = performance.now();
+    const pxPerSecond = 42;
+
+    function tick(now: number) {
+      const dt = (now - last) / 1000;
+      last = now;
+      if (!pausedRef.current && el) {
+        el.scrollLeft += pxPerSecond * dt;
+        const half = el.scrollWidth / 2;
+        if (el.scrollLeft >= half) {
+          el.scrollLeft -= half;
+        }
+      }
+      frame = requestAnimationFrame(tick);
+    }
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  function pause() {
+    pausedRef.current = true;
+    if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current);
+  }
+
+  function scheduleResume() {
+    if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current);
+    resumeTimeoutRef.current = setTimeout(() => {
+      pausedRef.current = false;
+    }, 2000);
+  }
+
+  function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    pause();
+    if (e.pointerType === "mouse" && scrollerRef.current) {
+      dragRef.current = { startX: e.clientX, startScroll: scrollerRef.current.scrollLeft };
+    }
+  }
+
+  function onPointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!dragRef.current || !scrollerRef.current) return;
+    const dx = e.clientX - dragRef.current.startX;
+    scrollerRef.current.scrollLeft = dragRef.current.startScroll - dx;
+  }
+
+  function endInteraction() {
+    dragRef.current = null;
+    scheduleResume();
+  }
+
   return (
     <section id="markalar" className="overflow-hidden bg-brand-50/40 py-24">
       <div className="container-x">
@@ -47,10 +114,26 @@ export default function Brands() {
         <div
           className="[mask-image:linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]"
         >
-          <div className="flex w-max animate-marquee gap-4 hover:[animation-play-state:paused]">
-            {[...BRANDS, ...BRANDS].map((brand, i) => (
-              <BrandBadge key={`${brand}-${i}`} brand={brand} />
-            ))}
+          <div
+            ref={scrollerRef}
+            className="no-scrollbar cursor-grab select-none overflow-x-auto active:cursor-grabbing"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={endInteraction}
+            onPointerLeave={endInteraction}
+            onPointerCancel={endInteraction}
+            onTouchStart={pause}
+            onTouchEnd={scheduleResume}
+            onWheel={() => {
+              pause();
+              scheduleResume();
+            }}
+          >
+            <div className="flex w-max gap-4">
+              {[...BRANDS, ...BRANDS].map((brand, i) => (
+                <BrandBadge key={`${brand}-${i}`} brand={brand} />
+              ))}
+            </div>
           </div>
         </div>
       </Reveal>

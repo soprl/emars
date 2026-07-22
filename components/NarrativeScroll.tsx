@@ -100,6 +100,15 @@ function ScrubVideo({
     }
     video.addEventListener("loadedmetadata", onLoaded);
     if (video.readyState >= 1) onLoaded();
+    // iOS Safari (and some mobile Chrome builds) refuse to render seeked
+    // frames on a <video> that has never actually played — setting
+    // currentTime silently does nothing until the decoder has been
+    // "woken up" once. Muted autoplay is allowed without a user gesture,
+    // so play immediately and pause on the very next frame to prime it.
+    video
+      .play()
+      .then(() => video.pause())
+      .catch(() => {});
     return () => video.removeEventListener("loadedmetadata", onLoaded);
   }, []);
 

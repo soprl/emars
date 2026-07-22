@@ -60,6 +60,14 @@ function ServiceLayer({
     }
     el.addEventListener("loadedmetadata", onLoaded);
     if (el.readyState >= 1) onLoaded();
+    // iOS Safari (and some mobile Chrome builds) refuse to render seeked
+    // frames on a <video> that has never actually played — setting
+    // currentTime silently does nothing until the decoder has been
+    // "woken up" once. Muted autoplay is allowed without a user gesture,
+    // so play immediately and pause on the very next frame to prime it.
+    el.play()
+      .then(() => el.pause())
+      .catch(() => {});
     return () => el.removeEventListener("loadedmetadata", onLoaded);
   }, []);
 
